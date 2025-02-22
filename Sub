@@ -1,0 +1,416 @@
+#Include <ScriptGuard>
+#NoEnv
+#Persistent ; 스크립트가 계속 실행되도록 하는 전역설정
+#SingleInstance Force ; 중복실행 방지
+#IfWinActive ahk_exe msw.exe
+SetBatchLines, -1 ; 성능 최적화
+Sendmode Input
+SetMouseDelay, -1
+SetKeyDelay, -1
+SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
+
+ProcessName := "도사오핫v0.86.exe" ; 'A.exe'를 실제 프로그램의 이름으로 변경하세요
+;ProcessName := "AutoHotkey.exe" ; 'A.exe'를 실제 프로그램의 이름으로 변경하세요
+
+; 프로세스가 실행 중인지 확인
+If !ProcessExist(ProcessName)
+{
+    ; 프로세스가 실행 중이지 않으면 스크립트 종료
+    MsgBox, 16, 경고,메인스크립트가 실행중이지 않습니다`n스크립트를 종료합니다.
+    ExitApp
+}
+
+ProcessExist(ProcessName)
+{
+    Process, Exist, %ProcessName%
+    return ErrorLevel
+}
+
+iniFile := A_ScriptDir "\settings.ini"
+
+AutoResurrection := false
+isAover := false
+isPressed := false
+AutoGong := false
+isAllStop := false
+
+
+;핫키관련
+IniRead, Hotkey5, %iniFile%, KeySettings, Hotkey5, End
+Hotkey, ~%Hotkey5%, Aover
+
+
+;키관련
+IniRead, key1, %iniFile%, Settings, Key1, 1
+IniRead, key2, %iniFile%, Settings, Key2, 2
+IniRead, key3, %iniFile%, Settings, Key3, 3
+IniRead, key4, %iniFile%, Settings, Key4, 4
+IniRead, key5, %iniFile%, Settings, Key5, 5
+IniRead, key6, %iniFile%, Settings, Key6, 6
+IniRead, key7, %iniFile%, Settings, Key7, 7
+IniRead, key8, %iniFile%, Settings, Key8, 8
+IniRead, key9, %iniFile%, Settings, Key9, 9
+IniRead, key0, %iniFile%, Settings, Key0, 0
+IniRead, key11, %iniFile%, Settings, Key11, q
+IniRead, key12, %iniFile%, Settings, Key12, w
+IniRead, itemkey1, %iniFile%, Settings, itemkey1, z
+
+;보이기 관련
+
+Key1Ac := "Numpad" . Key1  ; => "Numpad1"
+Key2Ac := "Numpad" . Key2  ; => "Numpad2"
+Key3Ac := "Numpad" . Key3  ; => "Numpad3"
+Key4Ac := "Numpad" . Key4  ; => "Numpad4"
+Key5Ac := "Numpad" . Key5  ; => "Numpad5"
+Key6Ac := "Numpad" . Key6  ; => "Numpad6"
+Key7Ac := "Numpad" . Key7  ; => "Numpad7"
+Key8Ac := "Numpad" . Key8  ; => "Numpad8"
+Key9Ac := "Numpad" . Key9  ; => "Numpad9"
+Key0Ac := "Numpad" . Key0  ; => "Numpad0"
+
+IniRead, GuiX, %iniFile%, Settings, GuiX, 0
+IniRead, GuiY, %iniFile%, Settings, GuiY, 0
+
+; 좌표관련
+IniRead, IX1, %iniFile%, Settings, IX1, 0 ;부활좌표
+IniRead, IX2, %iniFile%, Settings, IX2, 0
+IniRead, IY1, %iniFile%, Settings, IY1, 0
+IniRead, IY2, %iniFile%, Settings, IY2, 0
+IniRead, Agx2, %iniFile%, Settings, Agx2, 1688 ; 공증좌표
+IniRead, Agy2, %iniFile%, Settings, Agy2, 860
+IniRead, Agy1, %iniFile%, Settings, Agy1, 855
+IniRead, Agx0, %iniFile%, Settings, Agx0, 1508
+IniRead, Gtime, %iniFile%, Settings, Gtime, 5
+
+GtimeActive := Gtime / 100
+ManaBar := (Agx2 - Agx0) * GtimeActive
+/*
+if (ManaBar < 0) {  ; 길이가 음수가 되지 않도록 체크
+        ManaBar := 0
+}
+*/
+
+Agx1 := Agx2 - ManaBar
+IniRead, InvX1, %iniFile%, Settings, InvX1, 0 ;금강좌표
+IniRead, InvX2, %iniFile%, Settings, InvX2, 0
+IniRead, InvY1, %iniFile%, Settings, InvY1, 0
+IniRead, InvY2, %iniFile%, Settings, InvY2, 0
+
+
+if (GuiX < 0) {
+    GuiX := 0
+}
+if (GuiY < 0) {
+    GuiY := 0
+}
+
+if (GuiX = "") {
+    GuiX := 0
+}
+if (GuiY = "") {
+    GuiY := 0
+}
+GuiY2 := GuiY+377
+
+
+Gui, Add, Text, ,부활 작동여부 :
+Gui, Add, Text, vRText x+1 cRed, 작동정지
+Gui, Add, Edit, vRtion x+1 y2, 미발견
+
+Gui, Add, Text, x10,공증 작동여부 :
+Gui, Add, Text, vGText x+1 cRed, 작동정지
+Gui, Add, Edit, vGtion x+1 y22, 미발견
+
+Gui, Add, Text, x10,금강 작동여부 :
+Gui, Add, Text, vIText x+1 cRed, 작동정지
+Gui, Add, Edit, vItion x+1 y45, 미발견
+
+GuiControl, Enable, RText,
+GuiControl, Disable, Rtion,
+
+GuiControl, Enable, GText,
+GuiControl, Disable, Gtion,
+
+GuiControl, Enable, IText,
+GuiControl, Disable, Ition,
+
+Gui, +AlwaysOnTop
+Gui, Show, x%GuiX% y%GuiY2% w250, 서브스크립트
+
+RTextToggle1(isRunning) {
+    if (isRunning) {
+        GuiControl, ,RText, 작동중
+        GuiControl, +cRed +w700 , RText
+    } else {
+        GuiControl, ,RText ,작동정지
+        GuiControl, +cBlue +w700 , RText
+    }
+}
+
+RTextToggle2(isRunning) {
+    if (isRunning) {
+        GuiControl, ,GText, 작동중
+        GuiControl, +cRed +w700 , GText
+    } else {
+        GuiControl, ,GText ,작동정지
+        GuiControl, +cBlue +w700 , GText
+    }
+}
+
+RTextToggle3(isRunning) {
+    if (isRunning) {
+        GuiControl, ,IText, 작동중
+        GuiControl, +cRed +w700 , IText
+    } else {
+        GuiControl, ,IText ,작동정지
+        GuiControl, +cBlue +w700 , IText
+    }
+}
+
+~PgDn::
+isAllstop := !isAllstop
+    if (isAllstop) {
+        RTextToggle1(false)
+        RTextToggle2(false)
+        RTextToggle3(false)
+        AutoResurrection := false
+        isAover := false
+        isPressed := false
+        AutoGong := false
+        Settimer, SendZero, off
+        SetTimer, AutoInvin, Off
+        SetTimer, CheckDead2, Off
+        SetTimer, Agong, Off
+    } else {
+    }
+return
+
+
+~F8::
+if (isAllstop) {
+        return
+    }
+    AutoResurrection := !AutoResurrection  ; 자동부활 켜기/끄기
+    if (AutoResurrection) {
+        SetTimer, CheckDead2, 50  ; 자동부활시간
+		RTextToggle1(true)
+    } else {
+        SetTimer, CheckDead2, Off  ; 자동부활Off
+		RTextToggle1(false)
+    }
+Return
+
+Aover:
+if (isAllstop) {
+        return
+    }
+    isAover := !isAover
+
+    ControlGet, Invincibility, Checked, , Button7, ahk_exe 도사오핫v0.86.exe
+
+    if(!isAover) {
+        isPressed := false
+        Settimer, SendZero, off
+        SetTimer, AutoInvin, Off
+        RTextToggle3(false)
+    } else if (isAover) {
+        RTextToggle3(true)
+        if(Invincibility=1) {
+            SetTimer, AutoInvin, 10
+        } else if (Invincibility=0) {
+            SetTimer, AutoInvin, Off
+        }
+    }
+return
+
+~RButton Up::
+if (isAllstop) {
+        return
+    }
+
+    ControlGet, Invincibility, Checked, , Button7, ahk_exe 도사오핫v0.86.exe
+
+    if (isAover){
+        if(Invincibility=0) {
+            if (!isPressed) {
+                isPressed := true ; 스크립트 시작
+                SetTimer, SendZero, 1000 ; 1000ms (1초)마다 SendKey 레이블 호출
+            } else if (!isAover) {
+                isPressed := false
+                SetTimer, SendZero, off
+            }
+        }
+    }
+return
+
+~RButton::
+if (isAllstop) {
+        return
+    }
+
+    ControlGet, Invincibility, Checked, , Button7, ahk_exe 도사오핫v0.86.exe
+
+    if (isAover) {
+        if(Invincibility=0) {
+            if (isPressed) {
+                SetTimer, SendZero, Off ; 오른쪽 마우스 버튼을 누르고 있으면 타이머 중지
+                isPressed := false ; 스크립트 상태 변경
+            }
+        }
+    }
+return
+
+~F7::
+if (isAllstop) {
+        return
+    }
+    AutoGong := !AutoGong  ; 상태 변경
+    if (!AutoGong) {
+        SetTimer, Agong, Off  ; 검색 중지
+        RTextToggle2(false)
+    } else if (AutoGong) {
+        SetTimer, Agong, 100  ; 검색 시작
+        RTextToggle2(true)
+    }
+Return
+
+Agong:
+if (isAllstop) {
+        return
+    }
+    CoordMode, Pixel, Client
+    CoordMode, Mouse, Client
+    ImageSearch, GnX, GnY, Agx1, Agy1, Agx2, Agy2, Imagesearch\공증.png
+    If (ErrorLevel = 0) {
+        if (ZeroManaTime = 0) {
+            ZeroManaTime := A_TickCount
+        } Else If ((A_TickCount - ZeroManaTime) >= 1000) {
+            Sleep, 50
+            SendInput, {Ctrl Down}
+            Sleep, 30
+            SendInput, {%itemkey1% Down}
+            Sleep, 100
+            SendInput, {%itemkey1% Up}
+            SendInput, {Ctrl Up}
+            Sleep, 50
+            ZeroManaTime := 0
+        }
+        GuiControl,, Gtion, 발견
+        SendInput, {%Key2Ac%}
+    } Else {
+        GuiControl,, Gtion, 미발견
+        ZeroManaTime := 0
+    }
+
+Return
+
+
+AutoInvin:
+if (isAllstop) {
+        return
+    }
+    CoordMode, Pixel, Client
+    ControlGet, Invincibility, Checked, , Button7, ahk_exe 도사오핫v0.86.exe
+
+    if(Invincibility=1) {
+        ImageSearch, InX, InY, InvX1, InvY1, InvX2, InvY2, *TransWhite ImageSearch\불체.png
+            if (ErrorLevel = 0) {
+                GuiControl,, Ition, 미발견
+                SetTimer, SendZero, Off
+            } else if (ErrorLevel = 1) {
+                GuiControl,, Ition, 발견
+                Sendinput, {s}
+                Sendinput, {%Key0Ac%}
+            }
+    }
+
+Return
+
+
+SendZero:
+if (isAllstop) {
+        return
+    }
+
+    Sendinput, {%key0Ac%} ; ini 파일에서 읽은 키를 입력
+
+return
+
+CheckDead2:
+if (isAllstop) {
+        return
+    }
+    CoordMode, Pixel, Client
+    CoordMode, Mouse, Client
+{
+
+    found := false  ; 발견 여부 초기화
+
+
+    ; 앞 이미지 검색
+    ImageSearch, CdX, CdY, %IX1%, %IY1%, %IX2%, %IY2%, ImageSearch\부활.png
+    CuX := CdX + 6
+    CuY := CdY + 42
+    if (ErrorLevel = 0) ; 앞 이미지가 발견된 경우
+{
+        GuiControl,, Rtion, 발견
+
+
+
+        Sleep, 100
+        BlockInput, MouseMove
+        Sendinput, {%Key9%}
+        Sleep, 50
+        MouseClick, Left, %CuX%, %CuY%
+        MouseClick, Left, %CuX%, %CuY%
+        MouseClick, Left, %CuX%, %CuY%
+        Sleep, 50
+        Sendinput, {Enter}
+        Sleep, 50
+        Sendinput, {%Key3%}
+        Sleep, 50
+        Sendinput, {Enter}
+        Sleep, 50
+        Sendinput, {%Key3%}
+        Sleep, 50
+        Sendinput, {Enter}
+        Sleep, 50
+        Sendinput, {%Key3%}
+        Sleep, 50
+        Sendinput, {Enter}
+        Sleep, 50
+
+        Sleep, 30
+        SendInput, {Shift Down}
+        Sleep, 30
+        SendInput, {z}
+        SendInput, {Shift Up}
+        Sleep, 30
+        Sendinput, {%Key11%}
+        Sleep, 30
+        Sendinput, {Enter}
+
+        Sleep, 30
+        SendInput, {Shift Down}
+        Sleep, 30
+        SendInput, {z}
+        SendInput, {Shift Up}
+        Sleep, 30
+        Sendinput, {%Key12%}
+        Sleep, 30
+        Sendinput, {Enter}
+
+        Sleep, 30
+        Sendinput, {Esc}
+        Sleep, 100
+
+        BlockInput, Off
+
+    } else {
+        GuiControl,, Rtion, 미발견
+    }
+}
+Return
+
+GuiClose:
+ExitApp
