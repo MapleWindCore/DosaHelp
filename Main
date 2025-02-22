@@ -1,0 +1,1434 @@
+#Include <ScriptGuard>
+#NoEnv
+#Persistent
+#SingleInstance Force
+#IfWinActive ahk_exe msw.exe
+SetBatchLines, -1 ;
+Sendmode Input
+SetMouseDelay, -1
+SetKeyDelay, -1
+SetWorkingDir %A_ScriptDir%
+
+; INI 파일 경로 설정
+iniFile := A_ScriptDir "\settings.ini"
+MainPath := A_ScriptDir . "\도사오핫v0.86.exe"
+ScriptPath := A_ScriptDir . "\SubScript.exe"
+
+if Not A_IsAdmin {
+    try{
+        Run *RunAs %MainPath%
+    } catch  f {
+        MsgBox, MainScrpts를 관리자 권한으로 실행하는데 실패하였습니다`nError: %f%
+    }
+}
+
+LimitTime := "99991231"
+
+year := SubStr(LimitTime, 1, 4)
+month := SubStr(LimitTime, 5, 2)
+day := SubStr(LimitTime, 7, 2)
+
+;Sel := ComObjCreate("Selenium.Chr9omeDriver")
+;Sel.addarument("--headless")
+;Sel.addarument("--disable-infobar")
+
+Sel.get("https://time.navyism.com/")
+
+Today := Sel.FindElementByid("Time_area").Attribute("innerText")
+
+Sel.close()
+
+Today := SubStr(RegExReplace(Today, "\D]"), 1, 8)
+EnvSub, LimitTime, %Today%, Days
+;NowDays := %LimitTime% - %Today%
+    if (LimitTime < 0)
+    {
+        MsgBox, 16, 기간만료, 사용기간이 만료되었습니다.
+        ExitApp
+    } Else {
+        MsgBox, 64, 사용기간안내,사용가능기간 %LimitTime%일`n상태창 하단의 유효기간을 확인해주세요.
+    }
+
+
+CoordMode, Pixel, Client
+CoordMode, Mouse, Client
+
+
+
+ToggleHonheal := false
+ToggleAutoHeal := false
+isAover := false
+isPressed := false
+AutoResurrection := false
+OH := false
+AutoGong := false
+isAllstop := false
+MyHealActive := false
+
+HonHealAcc := 0
+SipaCheck := 0
+CheckMyheal := 0
+DropCheck := 0
+ZeroManaTime := 0
+
+; 초기설정 변수를 파일로부터 불러옵니다.
+IniRead, GuiX, %iniFile%, Settings, GuiX, 0
+IniRead, GuiY, %iniFile%, Settings, GuiY, 0
+
+if (GuiX < 0) {
+    GuiX := 0
+}
+if (GuiY < 0) {
+    GuiY := 0
+}
+
+if (GuiX = "") {
+    GuiX := 0
+}
+if (GuiY = "") {
+    GuiY := 0
+}
+
+
+; 마법키 및 마법관련
+IniRead, key1, %iniFile%, Settings, Key1, 1
+IniRead, key2, %iniFile%, Settings, Key2, 2
+IniRead, key3, %iniFile%, Settings, Key3, 3
+IniRead, key4, %iniFile%, Settings, Key4, 4
+IniRead, key5, %iniFile%, Settings, Key5, 5
+IniRead, key6, %iniFile%, Settings, Key6, 6
+IniRead, key7, %iniFile%, Settings, Key7, 7
+IniRead, key8, %iniFile%, Settings, Key8, 8
+IniRead, key9, %iniFile%, Settings, Key9, 9
+IniRead, key0, %iniFile%, Settings, Key0, 0
+IniRead, key11, %iniFile%, Settings, Key11, q
+IniRead, key12, %iniFile%, Settings, Key12, w
+IniRead, loop1, %iniFile%, Settings, Loop1, 1
+IniRead, loop2, %iniFile%, Settings, Loop2, 1
+IniRead, Gtime, %iniFile%, Settings, Gtime, 50
+IniRead, Htime, %iniFile%, Settings, Htime, 50
+
+; 아이템 관련
+IniRead, itemkey1, %iniFile%, Settings, itemkey1, z
+
+; 핫키 관련
+IniRead, Hotkey1, %iniFile%, KeySettings, Hotkey1, F12
+IniRead, Hotkey2, %iniFile%, KeySettings, Hotkey2, XButton1
+IniRead, Hotkey3, %iniFile%, KeySettings, Hotkey3, WheelDown
+IniRead, Hotkey4, %iniFile%, KeySettings, Hotkey4, WheelUp
+IniRead, Hotkey5, %iniFile%, KeySettings, Hotkey5, End
+IniRead, Hotkey6, %iniFile%, KeySettings, Hotkey6, `
+IniRead, Hotkey7, %iniFile%, KeySettings, Hotkey7, F11
+IniRead, Hotkey8, %iniFile%, KeySettings, Hotkey8, XButton2
+IniRead, Hotkey9, %iniFile%, KeySettings, Hotkey9, F9
+
+
+; 초기 체크박스세팅
+IniRead, Invincibility, %iniFile%, Settings, Invincibility, 0
+IniRead, SipaCheck, %iniFile%, Settings, SipaCheck, 0
+IniRead, CheckMyheal, %iniFile%, Settings, CheckMyheal, 0
+IniRead, DropCheck, %iniFile%, Settings, DropCheck, 0
+
+
+; 좌표 관련
+IniRead, IX1, %iniFile%, Settings, IX1, 0 ;부활좌표
+IniRead, IX2, %iniFile%, Settings, IX2, 0
+IniRead, IY1, %iniFile%, Settings, IY1, 0
+IniRead, IY2, %iniFile%, Settings, IY2, 0
+IniRead, Agx2, %iniFile%, Settings, Agx2, 1688 ; 공증좌표
+IniRead, Agy2, %iniFile%, Settings, Agy2, 860
+IniRead, Agy1, %iniFile%, Settings, Agy1, 855
+IniRead, Agx0, %iniFile%, Settings, Agx0, 1508
+GtimeActive := Gtime / 100
+HtimeActive := Htime / 100
+
+ManaBar := (Agx2 - Agx0) * GtimeActive
+HealthBar := (Agx2 - Agx0) * HtimeActive
+
+Hgx1 := Agx2 - HealthBar
+Agx1 := Agx2 - ManaBar
+IniRead, InvX1, %iniFile%, Settings, InvX1, 0 ;금강좌표
+IniRead, InvX2, %iniFile%, Settings, InvX2, 0
+IniRead, InvY1, %iniFile%, Settings, InvY1, 0
+IniRead, InvY2, %iniFile%, Settings, InvY2, 0
+
+;보이기 관련
+
+Key1Ac := "Numpad" . Key1  ; => "Numpad1"
+Key2Ac := "Numpad" . Key2  ; => "Numpad2"
+Key3Ac := "Numpad" . Key3  ; => "Numpad3"
+Key4Ac := "Numpad" . Key4  ; => "Numpad4"
+Key5Ac := "Numpad" . Key5  ; => "Numpad5"
+Key6Ac := "Numpad" . Key6  ; => "Numpad6"
+Key7Ac := "Numpad" . Key7  ; => "Numpad7"
+Key8Ac := "Numpad" . Key8  ; => "Numpad8"
+Key9Ac := "Numpad" . Key9  ; => "Numpad9"
+Key0Ac := "Numpad" . Key0  ; => "Numpad0"
+
+
+
+; 초기핫키설정
+Hotkey, %Hotkey1%, Aheal ;Aheal
+Hotkey, ~%Hotkey2%, HonHeal ;HonHeal
+Hotkey, %Hotkey3%, Rtion ;Rtion
+Hotkey, %Hotkey4%, Gmana ;Gmana
+Hotkey, ~%Hotkey5%, Aover
+Hotkey, ~%Hotkey6%, Drop ;Rtion
+Hotkey, %Hotkey7%, ClickHon ;Gmana
+Hotkey, %Hotkey8%, Onhon
+Hotkey, %Hotkey9%, ATT
+
+try{
+    Run *RunAs %ScriptPath%
+} catch  e {
+    MsgBox, SubScrpts를 관리자 권한으로 실행하는데 실패하였습니다`nError: %e%
+}
+
+
+; 키 설정을 위한 GUI 생성
+Gui, Add, Tab, vMyTab w+320 h+335, 상태|명령어|설정|키설정 ; 설정과 명령어 탭 추가
+Gui, +AlwaysOnTop ; 창이 항상 위에 표시되도록 설정
+
+Gui, Tab, 설정 ; 설정 탭 활성화
+Gui, Add, Text, x15 y35, 혼마 키 (기본: 1) :
+Gui, Add, Edit, vKey1Input w30 x120 y32 Number Limit1 Center, %key1% ; 혼마술 입력란
+
+Gui, Add, Text, x15 y65, 공증 키 (기본: 2) :
+Gui, Add, Edit, vKey2Input w30 x120 y62 Number Limit1 Center, %key2% ; 공증 입력란
+
+Gui, Add, Text, x15 y95, 기원 키 (기본: 3) :
+Gui, Add, Edit, vKey3Input w30 x120 y92 Number Limit1 Center, %key3% ; 기원 입력란
+
+Gui, Add, Text, x15 y125, 희원 키 (기본: 4) :
+Gui, Add, Edit, vKey4Input w30 x120 y122 Number Limit1 Center, %key4% ; 희원 입력란
+
+Gui, Add, Text, x15 y155, 시회 키 (기본: 5) :
+Gui, Add, Edit, vKey5Input w30 x120 y152 Number Limit1 Center,  %key5% ; 시회 입력란
+
+Gui, Add, Text, x15 y185, 파혼 키 (기본: 6) :
+Gui, Add, Edit, vKey6Input w30 x120 y182 Number Limit1 Center,  %key6% ; 파혼 입력란
+
+Gui, Add, Text, x15 y215, 공주 키 (기본: 7) :
+Gui, Add, Edit, vKey7Input w30 x120 y212 Number Limit1 Center, %key7% ; 공주 입력란
+
+Gui, Add, Text, x15 y245, 지진 키 (기본: 8) :
+Gui, Add, Edit, vKey8Input w30 x120 y242 Number Limit1 Center, %key8% ; 지진 입력란
+
+Gui, Add, Text, x15 y275, 부활 키 (기본: 9) :
+Gui, Add, Edit, vKey9Input w30 x120 y272 Number Limit1 Center, %key9% ; 부활 입력란
+
+Gui, Add, Text, x15 y305, 금강 키 (기본: 0) :
+Gui, Add, Edit, vKey0Input w30 x120 y302 Number Limit1 Center, %key0% ; 금강 입력란
+
+
+
+Gui, Add, Text, x190 y35, 보호 키 (기본: q) :
+Gui, Add, Edit, vKey11Input w30 x295 y32 Limit1 Center, %key11% ; 혼마술 입력란
+
+Gui, Add, Text, x190 y65, 무장 키 (기본: w) :
+Gui, Add, Edit, vKey12Input w30 x295 y62 Limit1 Center, %key12% ; 공증 입력란
+
+Gui, Add, Text, x190 y95, 술먹 키 (기본: z) :
+Gui, Add, Edit, vItemKey1Input w30 x295 y92 Limit1 Center, %itemkey1% ; 공증 입력란
+
+
+Gui, Add, Text, x155 y215, 혼마 반복횟수 (기본: 4) :
+Gui, Add, Edit, vLoop1Input w30 x295 y212 Number Limit1 Center, %loop1% ; 혼마 반복횟수 입력란
+
+Gui, Add, Text, x155 y245, 자힐 체력 설정　    (`%) :
+Gui, Add, Edit, vMyHealInput w30 x295 y242 Number Limit2 Center, %Htime% ; 마나% 입력란
+
+Gui, Add, Text, x155 y275, 공증 마나 설정　    (`%) :
+Gui, Add, Edit, vGtimeInput w30 x295 y272 Number Limit2 Center, %Gtime% ; 마나% 입력란
+
+
+Gui, Add, Button, gLoad x201 y315, 재시작
+Gui, Add, Button, gSaveSettings x+1, 저장 ; 저장 버튼
+Gui, Add, Button, gExit x+1 , 종료 ; 종료 버튼 추가
+
+/*
+**************
+명령어탭
+**************
+*/
+
+
+; 명령어 탭의 내용
+Gui, Tab, 명령어 ; 명령어 탭 활성화
+
+Gui, Add, Text, x15 y35, 금강중지 : ; End 명령어 텍스트
+Gui, Add, Edit, vSee1 x80 y32 w65 Center,%Hotkey5%
+GuiControl, Disable, See1
+
+Gui, Add, Text, x160 y35, 재시작 : ; Del 명령어 텍스트
+Gui, Add, Edit, vSee2 x220 y32 w65 Center, Delete
+GuiControl, Disable, See2
+
+
+Gui, Add, Text, x160 y60, 전체중지 : ; PgDn 명령어 텍스트
+Gui, Add, Edit, vSee3 x220 y57 w65 Center, PgDn
+GuiControl, Disable, See3
+
+Gui, Add, Text, x17 y73, ---------------------------------------------------
+
+Gui, Add, Text, x15 y85, 온리힐 : ; X1 버튼 명령어 텍스트
+Gui, Add, Edit, vSee4 x80 y82 w65 Center, %Hotkey1%
+GuiControl, Disable, See4
+
+Gui, Add, Text, x160 y85, 힐혼 : ; X2 명령어 텍스트
+Gui, Add, Edit, vSee5 x220 y82 w65 Center, %Hotkey2%
+GuiControl, Disable, See5
+
+Gui, Add, Text, x15 y110, 수동부활 : ; 휠업 명령어 텍스트
+Gui, Add, Edit, vSee6 x80 y107 w80 Center, %Hotkey3%
+GuiControl, Disable, See6
+
+Gui, Add, Text, x160 y110, 공주 : ; 휠다운 명령어 텍스트
+Gui, Add, Edit, vSee7 x220 y107 w65 Center, %Hotkey4%
+GuiControl, Disable, See7
+
+if (Hotket6 = `) {
+    Hotkey6Acc := ~
+} Else {
+    Hotkey6Acc = %Hotkey6%
+}
+
+Gui, Add, Text, x15 y135, 줍기 : ; 줍기 명령어 텍스트
+Gui, Add, Edit, vSee8 x80 y132 w65 Center, %Hotkey6Acc%
+GuiControl, Disable, See8
+
+Gui, Add, Text, x160 y135, 클릭혼 : ; Del 명령어 텍스트
+Gui, Add, Edit, vSee9 x220 y132 w65 Center, %Hotkey7%
+GuiControl, Disable, See9
+
+
+Gui, Add, Text, x15 y160, 꾹혼 : ; 꾹혼 명령어 텍스트
+Gui, Add, Edit, vSee10 x80 y157 w65 Center, %Hotkey8%
+GuiControl, Disable, See10
+
+Gui, Add, Text, x160 y160, 지진 : ; Del 명령어 텍스트
+Gui, Add, Edit, vSee13 x220 y157 w65 Center, %Hotkey9%
+GuiControl, Disable, See13
+
+Gui, Add, Text, x17 y173, ---------------------------------------------------
+
+Gui, Add, Text, x15 y185, 자동공증 :
+Gui, Add, Edit, vSee11 x80 y182 w65 Center, F7
+GuiControl, Disable, See11
+
+Gui, Add, Text, x160 y185, 자동부활 :
+Gui, Add, Edit, vSee12 x220 y182 w65 Center, F8
+GuiControl, Disable, See12
+
+
+Gui, Add, Text, x15 y295 cBlue, 클릭혼을 캐릭터에게 시전시 대상에게 보무를 겁니다.
+Gui, Add, Text, x15 y320 cBlue, 기본 줍기키는 숫자 1 왼쪽키 입니다.
+
+Gui, Add, Button, gExit x288 y315, 종료 ; 종료 버튼 추가
+
+/*
+**************
+상태탭
+**************
+*/
+
+
+Gui, Tab, 상태 ; 상태 탭 활성화
+
+Gui, Add, Text, x15 y35 w100, 자동힐 상태: ; ToggleAutoHeal의 이름 수정
+Gui, Add, Text, vStatusText2 x120 y35 cRed, 작동정지 ; 초기 상태 텍스트
+GuiControl,, StatusText2, 작동정지 ; 상태 텍스트 초기값 설정
+
+Gui, Add, CheckBox, vCheckMyheal x200 y35, 자기힐 사용
+GuiControl, , CheckMyheal, %CheckMyheal%
+
+Gui, Add, Text, x15 y65 w100, 힐혼 상태: ; ToggleAutoHeal의 이름 수정
+Gui, Add, Text, vStatusText x120 y65 cRed, 작동정지 ; 초기 상태 텍스트
+GuiControl,, StatusText, 작동정지 ; 상태 텍스트 초기값 설정
+
+Gui, Add, CheckBox, vSipaCheck gSCC x200 y65, 시회파혼 사용
+GuiControl, , SipaCheck, %SipaCheck%
+
+/*
+GuiControl, Disable, Key5Input
+GuiControl, Disable, Key6Input
+*/
+Gui, Add, Text, x15 y95 w100, 자동금강 상태: ; toggle3의 이름 수정
+Gui, Add, Text, vStatusText3 w50 x120 y95 cRed, 작동정지 ; 초기 상태 텍스트
+GuiControl,, StatusText3, 작동정지 ; 상태 텍스트 초기값 설정
+
+Gui, Add, CheckBox, x200 y95 vInvincibility, 이미지로 금강불체
+GuiControl, , Invincibility, %Invincibility%
+
+Gui, Add, CheckBox, x200 y125 vDropCheck, 줍기
+GuiControl, , DropCheck, %DropCheck%
+
+
+Gui, Add, Text, x15 y125 w100, 자동부활 상태: ; toggle4의 이름 수정
+Gui, Add, Text, vStatusText4 w50 x120 y125 cRed, 작동중지 ; 초기 상태 텍스트
+GuiControl,, StatusText4, 작동중지 ; 상태 텍스트 초기값 설정
+
+
+Gui, Add, Text, x15 y155 w100, 자동공증 상태: ; toggle5의 이름 수정
+Gui, Add, Text, vGmanaText w50 x120 y155 cRed, 작동중지  ; 초기 텍스트는 "작동중지"
+GuiControl,, GmanaText, 작동중지 ; 상태 텍스트 초기값 설정
+
+Gui, Add, Text, x142 y300, 사용기한 : %year%년 %month%월 %day%일 까지
+
+Gui, Add, Button, gExit x288 y315, 종료 ; 종료 버튼 추가
+
+/*
+**************
+키설정
+**************
+*/
+Gui, Tab, 키설정 ; 키설정 탭 활성화
+
+Gui, Add, Text, x15 y35 , 온리힐 :
+Gui, Add, Text, x+5 y35 , %Hotkey1%
+Gui, Add, Hotkey, vHotkey1 x135 y32 w80, %Hotkey1%  ; 입력란
+Gui, Add, DDL, x+1 w80 vSetHotkey1 gUpdateHotkey1, Wheelup|WheelDown|Mbutton|Xbutton1|Xbutton2|Insert|Home|PgUp|END
+
+Gui, Add, Text, x15 y60 , 힐혼키 :
+Gui, Add, Text, x+5 y60 , %Hotkey2%
+Gui, Add, Hotkey, vHotkey2 x135 y57 w80, %Hotkey2%  ; 입력란
+Gui, Add, DDL, x+1 w80 vSetHotkey2 gUpdateHotkey2, Wheelup|WheelDown|Mbutton|Xbutton1|Xbutton2|Insert|Home|PgUp|END
+
+Gui, Add, Text, x15 y85 , 부활키 :
+Gui, Add, Text, x+5 y85 , %Hotkey3%
+Gui, Add, Hotkey, vHotkey3 x135 y82 w80, %Hotkey3%  ; 입력란
+Gui, Add, DDL, x+1 w80 vSetHotkey3 gUpdateHotkey3, Wheelup|WheelDown|Mbutton|Xbutton1|Xbutton2|Insert|Home|PgUp|END
+
+Gui, Add, Text, x15 y110 , 공주키 :
+Gui, Add, Text, x+5 y110 , %Hotkey4%
+Gui, Add, Hotkey, vHotkey4 x135 y107 w80, %Hotkey4%  ; 입력란
+Gui, Add, DDL, x+1 w80 vSetHotkey4 gUpdateHotkey4, Wheelup|WheelDown|Mbutton|Xbutton1|Xbutton2|Insert|Home|PgUp|END
+
+Gui, Add, Text, x15 y135 , 금강키 :
+Gui, Add, Text, x+5 y135 , %Hotkey5%
+Gui, Add, Hotkey, vHotkey5 x135 y132 w80, %Hotkey5%  ; 입력란
+Gui, Add, DDL, x+1 w80 vSetHotkey5 gUpdateHotkey5, Wheelup|WheelDown|Mbutton|Xbutton1|Xbutton2|Insert|Home|PgUp|END
+
+Gui, Add, Text, x135 y155, 자동금강 멈춤키 설정
+
+Gui, Add, Text, x15 y175 , 줍기키 :
+Gui, Add, Text, x+5 y175 , %Hotkey6%
+Gui, Add, Hotkey, vHotkey6 x135 y172 w80, %Hotkey6%  ; 입력란
+Gui, Add, DDL, x+1 w80 vSetHotkey6 gUpdateHotkey6, Wheelup|WheelDown|Mbutton|Xbutton1|Xbutton2|Insert|Home|PgUp|END
+
+Gui, Add, Text, x15 y200 , 클릭혼 :
+Gui, Add, Text, x+5 y200 , %Hotkey7%
+Gui, Add, Hotkey, vHotkey7 x135 y197 w80, %Hotkey7%  ; 입력란
+Gui, Add, DDL, x+1 w80 vSetHotkey7 gUpdateHotkey7, Wheelup|WheelDown|Mbutton|Xbutton1|Xbutton2|Insert|Home|PgUp|END
+
+Gui, Add, Text, x15 y225 , 꾹혼키 :
+Gui, Add, Text, x+5 y225 , %Hotkey8%
+Gui, Add, Hotkey, vHotkey8 x135 y222 w80, %Hotkey8%  ; 입력란
+Gui, Add, DDL, x+1 w80 vSetHotkey8 gUpdateHotkey8, Wheelup|WheelDown|Mbutton|Xbutton1|Xbutton2|Insert|Home|PgUp|END
+
+Gui, Add, Text, x15 y250 , 지진키 :
+Gui, Add, Text, x+5 y250 , %Hotkey9%
+Gui, Add, Hotkey, vHotkey9 x135 y247 w80, %Hotkey9%
+Gui, Add, DDL, x+1 w80 vSetHotkey9 gUpdateHotkey9, Wheelup|WheelDown|Mbutton|Xbutton1|Xbutton2|Insert|Home|PgUp|END
+
+
+Gui, Add, Button, gSetCoord1 x15 y293, 좌표설정확인
+Gui, Add, Button, gSetCoord2 x+40 y293, 부활좌표
+Gui, Add, Button, gSetCoord3 x+1 y293, 공증좌표
+Gui, Add, Button, gSetCoord4 x+1 y293, 금강좌표
+
+
+Gui, Add, Text ,x15 y320, 설정할 키를 왼쪽에 입력하세요.
+
+Gui, Add, Button, gLoad x201 y315, 재시작
+Gui, Add, Button, gSaveSettings x+1, 저장
+Gui, Add, Button, gExit x+1 , 종료
+
+try {
+Coordmode, pixel, screen
+Gui, Show, x%GuiX% y%GuiY% w340 h350, 도사용_v0.86
+} Catch {
+Gui, Show, x0 y0 w340 h350, 도사용_v0.86
+}
+
+return
+
+SCC:
+Gui, Submit, NoHide
+    if(SipaCheck = 0) {
+;        GuiControl, Enable, Key5Input, %Key4%
+;        GuiControl, Enable, Key6Input, %Key4%
+    } Else if (SipaCheck = 1) {
+        HonHealAcc := 0
+;        GuiControl, Enable, Key5Input, %Key4%
+;        GuiControl, Enable, Key6Input, %Key4%
+    }
+Return
+
+
+UpdateHotkey1:
+    Gui, Submit, NoHide
+    GuiControl,, Hotkey1, %SetHotkey1%
+return
+
+UpdateHotkey2:
+    Gui, Submit, NoHide
+    GuiControl,, Hotkey2, %SetHotkey2%
+return
+
+UpdateHotkey3:
+    Gui, Submit, NoHide
+    GuiControl,, Hotkey3, %SetHotkey3%
+return
+
+UpdateHotkey4:
+    Gui, Submit, NoHide
+    GuiControl,, Hotkey4, %SetHotkey4%
+return
+
+UpdateHotkey5:
+    Gui, Submit, NoHide
+    GuiControl,, Hotkey5, %SetHotkey5%
+return
+
+UpdateHotkey6:
+    Gui, Submit, NoHide
+    GuiControl,, Hotkey6, %SetHotkey6%
+return
+
+UpdateHotkey7:
+    Gui, Submit, NoHide
+    GuiControl,, Hotkey7, %SetHotkey7%
+return
+
+UpdateHotkey8:
+    Gui, Submit, NoHide
+    GuiControl,, Hotkey8, %SetHotkey8%
+return
+
+UpdateHotkey9:
+    Gui, Submit, NoHide
+    GuiControl,, Hotkey9, %SetHotkey9%
+return
+
+
+
+Load:
+    Process, Close, SubScript.exe
+    Reload
+Return
+
+
+SaveSettings:
+    Gui, Submit, NoHide
+    GuiControlGet, Invincibility
+    WinGetPos, GuiX, GuiY, , ,도사용_v0.86
+    IniWrite, %GuiX%, %iniFile%, Settings, GuiX
+    IniWrite, %GuiY%, %iniFile%, Settings, GuiY
+
+    ; INI 파일에 설정을 저장합니다.
+    IniWrite, %Key1Input%, %iniFile%, Settings, Key1
+    IniWrite, %Key2Input%, %iniFile%, Settings, Key2
+    IniWrite, %Key3Input%, %iniFile%, Settings, Key3
+    IniWrite, %Key4Input%, %iniFile%, Settings, Key4
+    IniWrite, %Key5Input%, %iniFile%, Settings, Key5
+    IniWrite, %Key6Input%, %iniFile%, Settings, Key6
+    IniWrite, %Key7Input%, %iniFile%, Settings, Key7
+    IniWrite, %Key8Input%, %iniFile%, Settings, Key8
+    IniWrite, %Key9Input%, %iniFile%, Settings, Key9
+    IniWrite, %Key0Input%, %iniFile%, Settings, Key0
+    IniWrite, %Key11Input%, %iniFile%, Settings, Key11
+    IniWrite, %Key12Input%, %iniFile%, Settings, Key12
+    IniWrite, %ItemKey1Input%, %iniFile%, Settings, itemkey1
+    IniWrite, %Loop1Input%, %iniFile%, Settings, Loop1
+    IniWrite, %Loop2Input%, %iniFile%, Settings, Loop2
+    IniWrite, %GtimeInput%, %iniFile%, Settings, Gtime
+    IniWrite, %MyHealInput%, %iniFile%, Settings, Htime
+    IniWrite, %Hotkey1%, %iniFile%, KeySettings, Hotkey1
+    IniWrite, %Hotkey2%, %iniFile%, KeySettings, Hotkey2
+    IniWrite, %Hotkey3%, %iniFile%, KeySettings, Hotkey3
+    IniWrite, %Hotkey4%, %iniFile%, KeySettings, Hotkey4
+    IniWrite, %Hotkey5%, %iniFile%, KeySettings, Hotkey5
+    IniWrite, %Hotkey6%, %iniFile%, KeySettings, Hotkey6
+    IniWrite, %Hotkey7%, %iniFile%, KeySettings, Hotkey7
+    IniWrite, %Hotkey8%, %iniFile%, KeySettings, Hotkey8
+    IniWrite, %Hotkey9%, %iniFile%, KeySettings, Hotkey9
+    IniWrite, %IX1%, %iniFile%, Settings, IX1
+    IniWrite, %IY1%, %iniFile%, Settings, IY1
+    IniWrite, %IX2%, %iniFile%, Settings, IX2
+    IniWrite, %IY2%, %iniFile%, Settings, IY2
+    IniWrite, %Agx2%, %iniFile%, Settings, Agx2
+    IniWrite, %Agy2%, %iniFile%, Settings, Agy2
+    IniWrite, %Agy1%, %iniFile%, Settings, Agy1
+    IniWrite, %Agx0%, %iniFile%, Settings, Agx0
+    IniWrite, %InvX1%, %iniFile%, Settings, InvX1
+    IniWrite, %InvX2%, %iniFile%, Settings, InvX2
+    IniWrite, %InvY1%, %iniFile%, Settings, InvY1
+    IniWrite, %InvY2%, %iniFile%, Settings, InvY2
+
+    IniWrite, %Invincibility%, %iniFile%, Settings, Invincibility
+    IniWrite, %SipaCheck%, %iniFile%, Settings, SipaCheck
+    IniWrite, %CheckMyheal%, %iniFile%, Settings, CheckMyheal
+    IniWrite, %DropCheck%, %iniFile%, Settings, DropCheck
+
+    MsgBox, 262144,안내, 설정이 저장되었습니다.`n  스크립트가 재시작 됩니다.
+
+    Process, Close, SubScript.exe
+    Reload
+Return
+
+SetCoord1:
+    CoordMode, Pixel, Client
+    CoordMode, Mouse, Client
+
+    MsgBox, 262144, , 부활 시작점 : (%IX1%, %IY1%) 종료점 : (%IX2%, %IY2%)
+    MsgBox, 262144, , 공증 시작점 : (%Agx0%, %Agy1%) 종료점 : (%Agx2%, %Agy2%)
+    MsgBox, 262144, , 금강 시작점 : (%InvX1%, %InvY1%) 종료점 : (%InvX2%, %InvY2%)
+
+return
+
+SetCoord2:
+    CoordMode, Pixel, Client
+    CoordMode, Mouse, Client
+
+    MsgBox, 262144,, 부활좌표 설정중`n옛날바람 화면의 좌측 위 부분을 클릭 후 기다려주세요.
+        IfWinExist, ahk_exe msw.exe
+    {
+
+        WinActivate
+
+    }
+    KeyWait, Lbutton, D, T3
+    MouseGetPos, IX1, IY1
+
+    MsgBox, 262144,, 부활좌표 설정중`n옛날바람 화면의 우측 아래 부분을 클릭 후 기다려주세요.`n(채팅창 우측상단 X표 위)
+            IfWinExist, ahk_exe msw.exe
+    {
+
+        WinActivate
+
+    }
+    KeyWait, Lbutton, D, T3
+    MouseGetPos, IX2, IY2
+
+    IniWrite, %IX1%, %iniFile%, Settings, IX1
+    IniWrite, %IY1%, %iniFile%, Settings, IY1
+    IniWrite, %IX2%, %iniFile%, Settings, IX2
+    IniWrite, %IY2%, %iniFile%, Settings, IY2
+
+    MsgBox, 262144, , 부활 시작점 : (%IX1%, %IY1%) 종료점 : (%IX2%, %IY2%)
+Return
+
+SetCoord3:
+    CoordMode, Pixel, Client
+    CoordMode, Mouse, Client
+
+    MsgBox, 262144,, 공증좌표 설정중`n마나창의 좌측 상단 부분을 클릭 후 기다려주세요.
+            IfWinExist, ahk_exe msw.exe
+    {
+
+        WinActivate
+
+    }
+    KeyWait, Lbutton, D, T3
+    MouseGetPos, Agx0, Agy1
+
+    MsgBox, 262144,, 공증좌표 설정중`n마나창의 우측 하단 부분을 클릭 후 기다려주세요.
+            IfWinExist, ahk_exe msw.exe
+    {
+
+        WinActivate
+
+    }
+    KeyWait, Lbutton, D, T3
+    MouseGetPos, Agx2, Agy2
+
+    IniWrite, %Agx2%, %iniFile%, Settings, Agx2
+    IniWrite, %Agy2%, %iniFile%, Settings, Agy2
+    IniWrite, %Agy1%, %iniFile%, Settings, Agy1
+    IniWrite, %Agx0%, %iniFile%, Settings, Agx0
+
+    MsgBox, 262144, , 공증 시작점 : (%Agx0%, %Agy1%) 종료점 : (%Agx2%, %Agy2%)
+Return
+
+SetCoord4:
+    CoordMode, Pixel, Client
+    CoordMode, Mouse, Client
+
+    MsgBox, 262144,, 금강좌표 설정 전 상태창 (S) 창을 열어주세요.
+            IfWinExist, ahk_exe msw.exe
+    {
+
+        WinActivate
+
+    }
+    KeyWait, s, D, T3
+
+    MsgBox, 262144,, 금강좌표 설정중`n상태창(S) 마법칸의 의 좌측 위 부분을 클릭 후 기다려주세요.
+
+            IfWinExist, ahk_exe msw.exe
+    {
+
+        WinActivate
+
+    }
+
+    KeyWait, Lbutton, D, T3
+    MouseGetPos, InvX1, InvY1
+
+    MsgBox, 262144,, 금강좌표 설정중`n상태창(S) 마법칸의 우측 아래 부분을 클릭 후 기다려주세요.
+            IfWinExist, ahk_exe msw.exe
+    {
+
+        WinActivate
+
+    }
+    KeyWait, Lbutton, D, T3
+    MouseGetPos, InvX2, InvY2
+
+    IniWrite, %InvX1%, %iniFile%, Settings, InvX1
+    IniWrite, %InvX2%, %iniFile%, Settings, InvX2
+    IniWrite, %InvY1%, %iniFile%, Settings, InvY1
+    IniWrite, %InvY2%, %iniFile%, Settings, InvY2
+
+    MsgBox, 262144, , 금강 시작점 : (%InvX1%, %InvY1%) 종료점 : (%InvX2%, %InvY2%)
+Return
+
+
+/*
+*******************
+단축키관련 명령문
+*******************
+*/
+
+GuiControl,, Hotkey1, %Hotkey1%
+GuiControl,, Hotkey2, %Hotkey2%
+GuiControl,, Hotkey3, %Hotkey3%
+GuiControl,, Hotkey4, %Hotkey4%
+GuiControl,, Hotkey5, %Hotkey5%
+GuiControl,, Hotkey6, %Hotkey6%
+GuiControl,, Hotkey7, %Hotkey7%
+GuiControl,, Hotkey8, %Hotkey8%
+
+DEL::
+    Process, Close, SubScript.exe
+    Reload
+Return
+
+~PgDn::
+ isAllStop := !isAllStop
+    if (isAllstop) {
+
+        MsgBox, 작동이 정지되었습니다.
+        IfWinExist, ahk_exe msw.exe
+
+        WinActivate
+
+        ToggleStatus1(false)
+        ToggleStatus2(false)
+        ToggleStatus3(false)
+        ToggleStatus4(false)
+        ToggleStatus5(false)
+        SetTimer, AutohealSQC, Off
+        SetTimer, OHon, off
+        SetTimer, HonHealSQC, Off
+        SetTimer, MyHealSQC1, Off
+        SetTimer, MyHealSQC2, Off
+        SetTimer, CheckDead, Off
+        ToggleHonheal := false
+        ToggleAutoHeal := false
+        isAover := false
+        isPressed := false
+        AutoResurrection := false
+        OH := false
+        AutoGong := false
+        MyHealActive := false
+        HonHealAcc := 0
+        SipaCheck := 0
+        CheckMyheal := 0
+        ZeroManaTime := 0
+        Hotkey, %Hotkey1%, Off
+        Hotkey, ~%Hotkey2%, Off
+        Hotkey, %Hotkey3%, Off
+        Hotkey, %Hotkey4%, Off
+        Hotkey, ~%Hotkey5%, Off
+        Hotkey, ~%Hotkey6%, Off
+        Hotkey, %Hotkey7%, Off
+        Hotkey, %Hotkey8%, Off
+        Hotkey, %Hotkey9%, Off
+
+    } Else if (!isAllstop) {
+        Hotkey, %Hotkey1%, On
+        Hotkey, ~%Hotkey2%, On
+        Hotkey, %Hotkey3%, On
+        Hotkey, %Hotkey4%, On
+        Hotkey, ~%Hotkey5%, On
+        Hotkey, ~%Hotkey6%, On
+        Hotkey, %Hotkey7%, On
+        Hotkey, %Hotkey8%, On
+        Hotkey, %Hotkey9%, On
+        ToolTip, 작동시작 모든키가 정상작동합니다.
+        SetTimer, Remove, 3000
+    }
+return
+
+Remove:
+    ToolTip
+    SetTimer, Remove, Off
+return
+
+Pause::Pause
+
+/*
+**********
+자동금강
+**********
+*/
+
+Aover:
+if (isAllstop) {
+        return
+    }
+    isAover := !isAover
+
+    GuiControlGet, Invincibility
+
+    if(!isAover) {
+        ToggleStatus3(false)
+    } else if (isAover) {
+        ToggleStatus3(true)
+    }
+    If !WinExist("ahk_exe SubScript.exe") {
+    ToggleStatus3(false)
+    MsgBox, SubScript.exe가 실행되고 있지 않습니다.
+    }
+return
+
+/*
+**********
+ 상태함수
+**********
+*/
+
+ToggleStatus1(isRunning) {
+    if (isRunning) {
+        GuiControl,, StatusText, 작동중
+        GuiControl, +cRed +w700 , StatusText
+    } else {
+        GuiControl,, StatusText, 작동정지
+        GuiControl, +cBlue +w700 , StatusText
+    }
+}
+ToggleStatus2(isRunning) {
+    if (isRunning) {
+        GuiControl,, StatusText2, 작동중
+        GuiControl, +cRed +w700 , StatusText2
+    } else {
+        GuiControl,, StatusText2, 작동정지
+        GuiControl, +cBlue +w700 , StatusText2
+    }
+}
+
+ToggleStatus3(isRunning) {
+    if (isRunning) {
+        GuiControl,, StatusText3, 작동중
+        GuiControl, +cRed +w700 , StatusText3
+    } else {
+        GuiControl,, StatusText3, 작동정지
+        GuiControl, +cBlue +w700 , StatusText3
+    }
+}
+
+ToggleStatus4(isRunning) {
+    if (isRunning) {
+        GuiControl,, StatusText4, 작동중
+        GuiControl, +cRed +w700 , StatusText4
+    } else {
+        GuiControl,, StatusText4, 작동정지
+        GuiControl, +cBlue +w700 , StatusText4
+    }
+}
+
+ToggleStatus5(isRunning) {
+    if (isRunning) {
+        GuiControl,, GmanaText, 작동중
+        GuiControl, +cRed +w700 , GmanaText
+    } else {
+        GuiControl,, GmanaText, 작동정지
+        GuiControl, +cBlue +w700 , GmanaText
+    }
+}
+
+/*
+**********
+   혼힐
+**********
+*/
+
+HonHeal:
+Gui, Submit, Nohide
+if (isAllstop) {
+        return
+    }
+ToggleHonheal := !ToggleHonheal
+if (ToggleHonheal)
+{
+
+    if (ToggleAutoHeal)
+    {
+        ToggleAutoHeal := false
+        SetTimer, AutohealSQC, Off
+        ToggleStatus2(false)
+    }
+
+    if (!OH)
+    {
+        SetTimer, OHon, off
+    } else {
+        OH := false
+        SetTimer, OHon, off
+    }
+
+    Sleep, 50
+         if (CheckMyheal = 0) {
+            SetTimer, HonHealSQC, 1
+            ;Settimer, Stop, 1005
+            ;ToolTip, 자기힐안함
+        } else if (CheckMyHeal = 1) {
+            ;Tooltip, 자기힐함
+            SetTimer, HonHealSQC, 1
+            SetTimer, MyHealSQC1, 1
+        }
+    ToggleStatus1(true)
+
+} else {
+    SetTimer, MyHealSQC1, Off
+    SetTimer, HonHealSQC, Off
+    ToggleStatus1(false)
+    return
+}
+return
+
+HonHealSQC:
+;Time := A_TickCount
+        if (!ToggleHonheal) {
+            return
+        }
+        if (isAllstop) {
+            return
+        }
+
+            Sendinput, {Esc}
+
+            ;BlockInput, On
+            ;Sendinput, {Blind} {Up UP} {Down UP} {Left UP} {Right UP}
+
+            Sleep, 35
+
+            Sendinput, {Tab}
+            Sleep, 40
+            Sendinput, {Tab}
+            ;BlockInput, Off
+            Sleep, 25
+
+            Sendinput, {%key3Ac% Down}
+
+                if (SipaCheck = 0) {
+                    Sleep, 15
+                    Sendinput, {%key4Ac%}
+                    SendInput, {%Key9Ac%}
+                } Else {
+                    if (HonHealAcc = 0) {
+                        HonHealAcc++
+                        Sleep, 15
+                        Sendinput, {%key4Ac%}
+                        SendInput, {%Key9Ac%}
+                    } Else if (HonHealAcc = 1) {
+                        HonHealAcc++
+                        Sleep, 15
+                        Sendinput, {%key5Ac%}
+                        SendInput, {%Key9Ac%}
+                    } Else if (HonHealAcc = 2) {
+                        HonHealAcc := 0
+                        Sleep, 15
+                        Sendinput, {%key6Ac%}
+                        SendInput, {%Key9Ac%}
+                    }
+                }
+
+
+            Sendinput, {%key3Ac% Down}
+            Sleep, 200
+            if (DropCheck = 0) {
+            } else if (DropCheck = 1){
+            SendInput, {,}
+            }
+            Sleep, 190
+            Sendinput, {%key3Ac% up}
+
+            Loop, %loop1% {
+                if (!ToggleHonheal)
+                {
+                    return
+                }
+                if (MyHealActive) {
+                    return
+                }
+            Sendinput, {ESC}
+            Sleep, 10
+            Sendinput, {%key1Ac%}
+            Sleep, 40
+            Sendinput, {Up}
+            Sleep, 40
+            Sendinput, {Enter}
+            Sleep, 10
+            }
+/*
+ATime := A_TickCount - Time
+Tooltip, %ATime%
+*/
+return
+
+
+MyHealSQC1:
+    CoordMode, Pixel, Client
+    CoordMode, Mouse, Client
+    if (isAllstop) {
+        return
+    }
+    if (!ToggleHonheal) {
+        SetTimer, MyHealSQC1, Off
+        return
+    }
+
+    Hgy1 := Agy1 - 30
+    Hgy2 := Agy2 - 30
+    ImageSearch, HnX, HnY, Hgx1, Hgy1, Agx2, Hgy2, Imagesearch\공증.png
+
+        if (ErrorLevel = 0) {
+            SetTimer, HonHealSQC, Off
+            MyHealActive := true
+
+            Sleep,100
+            SendInput, {Esc}
+            Sleep, 30
+            SendInput, {%Key3Ac% Down}
+            Sleep, 30
+            SendInput, {Home}
+            Sleep, 30
+            SendInput, {Enter Down}
+            Sleep, 200
+            SendInput, {,}
+            Sleep, 200
+            SendInput, {Enter Up}
+            Sleep, 30
+            SendInput, {%Key3Ac% Up}
+            Sleep, 30
+
+            MyHealActive := false
+            SetTimer, HonHealSQC, 10
+        } else if (ErrorLevel = 1) {
+
+        }
+return
+
+
+Aheal:
+if (isAllstop) {
+        return
+    }
+ToggleAutoHeal := !ToggleAutoHeal
+
+    if (ToggleAutoHeal) {
+        if (ToggleHonheal) {
+            Sleep, 50
+            ToggleHonheal := false
+            SetTimer, HonHealSQC, Off
+            ToggleStatus1(false)
+            Sleep, 50
+            Sendinput, {Esc}
+        }
+        if (CheckMyheal = 0) {
+            SetTimer, AutohealSQC, 10
+        } Else if (CheckMyHeal = 1) {
+            SetTimer, AutohealSQC, 10
+            SetTimer, MyHealSQC2, 10
+        }
+    ToggleStatus2(true)
+
+    } else {
+
+    SetTimer, AutohealSQC, Off
+    SetTimer, MyHealSQC2, Off
+    ToggleStatus2(false)
+    }
+return
+
+
+AutohealSQC:
+if (isAllstop) {
+        return
+    }
+    if (!ToggleAutoHeal) {
+        return
+    }
+
+
+    Sendinput, {Esc}
+    Sleep, 40
+    Sendinput, {Tab}
+    Sleep, 40
+    Sendinput, {Tab}
+    Sleep, 40
+
+    if (SipaCheck = 0) {
+        Sendinput, {%key4Ac%}
+        SendInput, {%Key9Ac%}
+        Sleep, 15
+    } Else {
+        if (HonHealAcc = 0) {
+            HonHealAcc++
+            Sendinput, {%key4Ac%}
+            SendInput, {%Key9Ac%}
+            Sleep, 15
+        } Else if (HonHealAcc = 1) {
+            HonHealAcc++
+            Sendinput, {%key5Ac%}
+            SendInput, {%Key9Ac%}
+            Sleep, 15
+        } Else if (HonHealAcc = 2) {
+            HonHealAcc := 0
+            Sendinput, {%key6Ac%}
+            SendInput, {%Key9Ac%}
+            Sleep, 15
+        }
+    }
+     Sleep, 35
+     Sendinput, {%key3Ac% Down}
+     Sleep, 450
+     Sendinput, {%key3Ac% Up}
+
+
+return
+
+
+MyHealSQC2:
+    CoordMode, Pixel, Client
+    CoordMode, Mouse, Client
+    if (isAllstop) {
+        return
+    }
+    if (!ToggleAutoHeal) {
+        SetTimer, MyHealSQC2, Off
+        return
+    }
+
+    Hgy1 := Agy1 - 30
+    Hgy2 := Agy2 - 30
+    ImageSearch, HnX, HnY, Hgx1, Hgy1, Agx2, Hgy2, Imagesearch\공증.png
+
+        if (ErrorLevel = 0) {
+            ;ToolTip, 찾음
+            SetTimer, HonHealSQC, Off
+
+            Sleep, 100
+            SendInput, {Esc}
+            Sleep, 30
+            SendInput, {%Key3Ac% Down}
+            Sleep, 30
+            SendInput, {Home}
+            Sleep, 30
+            SendInput, {Enter Down}
+            Sleep, 400
+            SendInput, {Enter Up}
+            Sleep, 30
+            SendInput, {%Key3Ac% Up}
+            Sleep, 30
+
+            SetTimer, HonHealSQC, 10
+        } else if (ErrorLevel = 1) {
+            ;ToolTip, 못찾음
+                ; 이미지가 발견되지 않은 경우
+                ; HonHealSQC는 계속 실행됨
+        }
+return
+
+
+Gmana:
+if (isAllstop) {
+        return
+    }
+    Sleep, 50
+    Sendinput {%Key7Ac%}
+    sleep, 30
+    Sendinput {Enter}
+
+    loop 2
+    {
+    SendInput, {Ctrl Down}
+    Sleep, 30
+    SendInput, {%itemkey1% Down}
+    Sleep, 50
+    SendInput, {%itemkey1% Up}
+    SendInput, {Ctrl Up}
+    }
+
+    loop 2
+    {
+    Sendinput, {%Key2Ac%}
+    sleep, 30
+    }
+
+return
+
+Rtion:
+if (isAllstop) {
+        return
+    }
+    Sleep, 100
+    Sendinput, {ESC}
+    Sleep, 30
+    Sendinput, {%Key9Ac%}
+    Sleep, 50
+    Sendinput, {Lbutton}
+    Sleep, 50
+    Sendinput, {Enter}
+
+    Sendinput, {%Key3Ac%}
+    Sleep, 50
+    Sendinput, {Enter}
+    Sleep, 50
+    Sendinput, {%Key3Ac%}
+    Sleep, 50
+    Sendinput, {Enter}
+
+    Sleep, 100
+    Sendinput, {%key6Ac%}
+    Sleep, 50
+    Sendinput, {Enter}
+    Sleep, 100
+    Sendinput, {%key5Ac%}
+    Sleep, 50
+    Sendinput, {Enter}
+    Sleep, 50
+    Sendinput, {ESC}
+return
+
+/*
+**********
+공증인식
+**********
+*/
+
+~F7::
+if (isAllstop) {
+        return
+    }
+    AutoGong := !AutoGong
+    if (!AutoGong) {
+;        SetTimer, Agong, Off  ; 검색 중지
+        ToggleStatus5(false)
+    } else if (AutoGong) {
+;        SetTimer, Agong, 100  ; 검색 시작
+        ToggleStatus5(true)
+    }
+    If !WinExist("ahk_exe SubScript.exe") {
+    ToggleStatus5(false)
+    MsgBox, SubScript.exe가 실행되고 있지 않습니다.
+    }
+Return
+
+/*
+**********
+자동부활
+**********
+*/
+
+~F8::
+if (isAllstop) {
+        return
+    }
+    AutoResurrection := !AutoResurrection
+    if (AutoResurrection) {
+        SetTimer, CheckDead, 50
+        ToggleStatus4(true)
+    } else {
+        SetTimer, CheckDead, Off
+        ToggleStatus4(false)
+    }
+Return
+
+
+
+CheckDead:
+    if (isAllstop) {
+        return
+    }
+    If WinExist("ahk_exe SubScript.exe") {
+
+        ControlGetText, editValue, Edit1, ahk_exe SubScript.exe
+
+
+        If (editValue = "미발견")
+        {
+
+        }
+        Else If (editValue = "발견")
+        {
+            Sleep, 1000
+        }
+    }
+    Else
+    {
+        SetTimer, CheckDead, Off
+        ToggleStatus4(false)
+        MsgBox, SubScript.exe가 실행되고 있지 않습니다.
+    }
+
+Return
+
+Drop:
+if (isAllstop) {
+        return
+    }
+    Sleep, 10
+    Sendinput, {Shift Down}
+    Sleep, 50
+    Sendinput, {,}
+    Sendinput, {Shift Up}
+Return
+
+ClickHon:
+if (isAllstop) {
+        return
+    }
+    Sleep, 10
+
+    Sendinput, {ESC} ; 타겟 초기화
+    Sleep, 30
+    Sendinput, {%key1Ac%}
+    Sleep, 30
+    Sendinput, {Lbutton}
+    Sleep, 30
+    Sendinput, {Enter}
+
+    Sleep, 30
+    SendInput, {Shift Down}
+    Sleep, 30
+    SendInput, {z}
+    SendInput, {Shift Up}
+    Sleep, 30
+    Sendinput, {%Key11%}
+    Sleep, 30
+    Sendinput, {Enter}
+
+    Sleep, 30
+    SendInput, {Shift Down}
+    Sleep, 30
+    SendInput, {z}
+    SendInput, {Shift Up}
+    Sleep, 30
+    Sendinput, {%Key12%}
+    Sleep, 30
+    Sendinput, {Enter}
+
+    Sleep, 100
+Return
+
+Onhon:
+if (isAllstop) {
+        return
+    }
+
+OH := !OH
+if (OH) {
+
+    if (ToggleHonheal) {
+        ToggleHonheal := false
+        SetTimer, HonHealSQC, Off
+        ToggleStatus1(false)
+    }
+    if (ToggleAutoHeal) {
+        ToggleAutoHeal := false
+        SetTimer, AutohealSQC, Off
+        ToggleStatus2(false)
+    }
+    if (isAover) {
+        isAover := False
+        isPressed := false
+
+        ToggleStatus3(false)
+    }
+    SetTimer, OHon, 50
+} else {
+    SetTimer, OHon, off
+
+    if (!isAover) {
+        isAover := true
+        ToggleStatus3(true)
+    }
+    if (!ToggleHonheal) {
+        ToggleHonheal := true
+        SetTimer, HonHealSQC, 10
+        ToggleStatus1(true)
+    }
+}
+return
+
+OHon:
+    if (isAllstop) {
+        return
+    }
+    Sendinput, {ESC}
+    Sleep, 20
+    Sendinput, {%key1Ac%}
+    Sleep, 50
+    Sendinput, {Up}
+    Sleep, 50
+    Sendinput, {Enter}
+    Sleep, 20
+    Sendinput, {ESC}
+Return
+
+ATT:
+if (isAllstop) {
+        return
+    }
+
+    Sleep, 200
+    Sendinput, {ESC}
+    Sleep, 30
+    Sendinput, {%key8Ac%}
+    Sleep, 30
+    Sendinput, {Lbutton}
+    Sleep, 30
+    Sendinput, {Enter}
+    Sleep, 30
+
+Return
+
+
+Exit:
+    Gui, Submit, Nohide
+    Coordmode, pixel, screen
+    WinGetPos, GuiX, GuiY, , ,도사용_v0.86
+
+    IniWrite, %GuiX%, %iniFile%, Settings, GuiX
+    IniWrite, %GuiY%, %iniFile%, Settings, GuiY
+
+    Process, Close, SubScript.exe
+    Gui, Destroy
+    ExitApp
+return
+
+GuiClose:
+    Gui, Submit, Nohide
+    Coordmode, pixel, screen
+    WinGetPos, GuiX, GuiY, , ,도사용_v0.86
+
+    IniWrite, %GuiX%, %iniFile%, Settings, GuiX
+    IniWrite, %GuiY%, %iniFile%, Settings, GuiY
+
+    Process, Close, SubScript.exe
+    ExitApp
+return
